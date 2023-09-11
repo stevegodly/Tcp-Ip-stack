@@ -5,13 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <pthread.h>
-#include <sys/select.h>
-#include <netdb.h>
+
 
 static unsigned int udpPort =4000;
 
@@ -39,6 +33,8 @@ void init_udp_socket(node_t *node){
 
 }
 
+extern void layer2FrameRecv(node_t *node, interface *interf,char *pkt, unsigned int pkt_size);
+
 int recvPckt(node_t *node,char *buff,int size){
     char *intfName=buff;
     interface *intf=getIntfByName(node,intfName);
@@ -46,9 +42,7 @@ int recvPckt(node_t *node,char *buff,int size){
         printf("Error : Pkt recvd on unknown interface %s on node %s\n",intf->name, node->node_name);
         return 0;
     }
-    printf("Message recieved :%s from node : %s out of interface : %s",buff+(strlen(intfName)+1),node->node_name,intfName);
-
-    
+    layer2FrameRecv(node,intf,buff+NAME_SIZE,size-NAME_SIZE );
     return 1;
 }
 
@@ -57,7 +51,7 @@ static void *nw_start_packet(void *arg){
     node_t *node;
     glthread_t *curr;
     fd_set bckpfds;
-    char *buffer=malloc(MAX_BUFFER);
+    char *buffer=calloc(1,2048);
     int maxSockfd=0,recvBytes=0,len,x;
     FD_ZERO(&bckpfds);
     ITERATE_GLTHREAD_BEGIN(&topo->node_list,curr){
@@ -98,13 +92,13 @@ void network_start_packet_thread(graph *topo){
 void sendPacket(char *pckt,int pcktSize,interface *interface_t){
     node_t *node=getNbrNode(interface_t);
     int dstPort = node->uPort,fd;
-    interface *dstIntf=(interface_t==&interface_t->link->intf1?&interface_t->link->intf1:&interface_t->link->intf2);
+    interface *dstIntf=(interface_t==&interface_t->link->intf1?&interface_t->link->intf2:&interface_t->link->intf1);
     
-    int len=pcktSize+strlen(dstIntf->name)+2;
-    char *auxPckt=malloc(len);
-    strcpy(auxPckt, dstIntf->name);
-    auxPckt[strlen(dstIntf->name)]='\0';
-    strcpy(auxPckt+strlen(dstIntf->name)+1,pckt);
+    int len=pcktSize+NAME_SIZE;
+    char *auxPckt=calloc(1,len);
+    strncpy(auxPckt, dstIntf->name,NAME_SIZE);
+    auxPckt[NAME_SIZE]='\0';
+    memcpy(auxPckt+NAME_SIZE,pckt,pcktSize);
     auxPckt[len-1]='\0';
     if ( (fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0 ) {
 		perror("socket creation failed");
@@ -125,14 +119,14 @@ void sendPacket(char *pckt,int pcktSize,interface *interface_t){
     free(auxPckt);
 } 
 
-int send_pkt_flood(node_t *node, char *pkt, unsigned int pkt_size){
+int send_pkt_flood(node_t *node, char *pkt, unsigned int len){
     unsigned int i = 0;
     interface *intf;
 
     for( ; i < MAX_INTF_PER_NODE; i++){
         intf = node->intf[i];
         if(!intf) return 0;
-        sendPacket(pkt, pkt_size, intf);
+        sendPacket(pkt, len, intf);
     }
     return 0;
 }

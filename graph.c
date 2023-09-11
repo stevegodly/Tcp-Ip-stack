@@ -7,7 +7,7 @@
 extern void init_udp_socket(node_t *node);
 
 graph *createNewGraph(char *buffer){
-    graph *topo=malloc(sizeof(graph));
+    graph *topo=calloc(1,sizeof(graph));
     strcpy(topo->topology_name, buffer);
     topo->topology_name[31]='\0';
     initGlthread(&topo->node_list);
@@ -15,10 +15,13 @@ graph *createNewGraph(char *buffer){
 }
 
 node_t *createGraphNode(graph *graphT,char *nodeName){
-    node_t *node=malloc(sizeof(node_t));
+    node_t *node=calloc(1,sizeof(node_t));
     strcpy(node->node_name, nodeName);
     node->node_name[NODE_NAME_SIZE-1]='\0';
     init_udp_socket(node);
+
+    init_node_nw_prop(&node->node_nw_prop);
+
     initGlthread(&node->graph_glue);
     addNextNode(&graphT->node_list,&node->graph_glue);
     return node;
@@ -39,7 +42,7 @@ void addNextNode(glthread_t *curr_glthread,glthread_t *new_glthread){
 }
 
 void createLink(node_t *node1,node_t *node2,char *from_name,char *to_name,unsigned int cost){
-    link_t *link=malloc(sizeof(link_t));
+    link_t *link=calloc(1,sizeof(link_t));
     strncpy(link->intf1.name,from_name,NAME_SIZE);
     link->intf1.name[NAME_SIZE-1]='\0';
     strncpy(link->intf2.name,to_name,NAME_SIZE);
@@ -54,9 +57,18 @@ void createLink(node_t *node1,node_t *node2,char *from_name,char *to_name,unsign
     link->cost = cost;
 
     int empty_slot=nodeIntfAvail(node1);
+    if(empty_slot==-1) exit(EXIT_FAILURE);
     node1->intf[empty_slot]=&link->intf1;
     empty_slot=nodeIntfAvail(node2);
+    if(empty_slot==-1) exit(EXIT_FAILURE);
     node2->intf[empty_slot]=&link->intf2;
+
+
+    init_intf_nw_prop(&link->intf1.intf_nw_props);
+    init_intf_nw_prop(&link->intf2.intf_nw_props);
+
+    interface_assign_mac_address(&link->intf1);
+    interface_assign_mac_address(&link->intf2);
 }
 
 void dumpGraph(graph *graph_t){

@@ -1,7 +1,10 @@
 #ifndef LAYER2_H
 #define LAYER2_H
 
+#include "../utils.h"
+#include "../graph.h"
 #include "../net.h"
+#include "../comms.h"
 #include "../gluethread/glthread.h"
 
 #define ARP_BROAD_REQ   1
@@ -41,20 +44,43 @@ typedef struct arp_table_{
 
 typedef struct arp_entry_{
     ip_add_t ip_addr;   
-    mac_add_t mac_addr;
+    mac_add_t  mac_addr;
     char oif_name[NAME_SIZE];
     glthread_t arp_glue;
 } arp_entry_t;
+
+/*VLAN support*/
+
+#pragma pack (push,1)
+/*Vlan 802.1q 4 byte hdr*/
+typedef struct vlan_8021q_hdr_{
+
+    unsigned short tpid; /* = 0x8100*/
+    short tci_pcp : 3 ;  /* inital 4 bits not used in this course*/
+    short tci_dei : 1;   /*Not used*/
+    short tci_vid : 12 ; /*Tagged vlan id*/
+} vlan_8021q_hdr_t;
+
+typedef struct vlan_ethernet_hdr_{
+
+    mac_add_t dst_mac;
+    mac_add_t src_mac;
+    vlan_8021q_hdr_t vlan_8021q_hdr;
+    unsigned short type;
+    char payload[248];  /*Max allowed 1500*/
+    unsigned int FCS;
+} vlan_ethernet_hdr_t;
+#pragma pack(pop)
 
 GLTHREAD_TO_STRUCT(getArpEntry,arp_entry_t,arp_glue);
 
 static inline ethernet_hdr_t *ALLOC_ETH_HDR_WITH_PAYLOAD(char *pkt, unsigned int pkt_size);
 
-void init_arp_table(arp_table_t *arpTable);
+void init_arp_table(arp_table_t **arpTable);
 
 arp_entry_t *arpTableLookup(arp_table_t *arpTable,char *ip);
 
-bool_t addArpEntry(arp_table_t *arpTable,arp_entry_t *entry;);
+bool_t addArpEntry(arp_table_t *arpTable,arp_entry_t *entry);
 
 void deleteArpEntry(arp_table_t *arpTable,char *ip);
 
@@ -64,18 +90,18 @@ void arpReplyTableUpdate(arp_table_t *arpTable,arp_hdr_t *arpHeader,interface *i
 
 void arpSendBroadcast(node_t * node,interface *intf,char *ip);
 
-void processArpBroadcastRequest(node_t *node, interface *iif, ethernet_hdr_t *ethernet_hdr);
+static void processArpBroadcastRequest(node_t *node, interface *iif, ethernet_hdr_t *ethernet_hdr);
 
-void layer2FrameRecv(node_t *node, interface_t *interface,char *pkt, unsigned int pkt_size);
+void layer2FrameRecv(node_t *node, interface *intf,char *pkt, unsigned int pkt_size);
 
 void promoteToL3();
 
 void dumpArpTable(arp_table_t *arp_table);
 
 static inline bool_t l2_frame_recv_qualify_on_interface(interface *intf, ethernet_hdr_t *ethernet_hdr){
-    if(!intf->is_ipadd_config) return FALSE;
+    if(!intf->intf_nw_props.is_ipadd_config) return FALSE;
 
-    if(memcmp(IF_MAC(interface),ethernet_hdr->dst_mac.mac,sizeof(mac_add_t)) == 0){
+    if(memcmp(IF_MAC(intf),ethernet_hdr->dst_mac.mac,sizeof(mac_add_t)) == 0){
         return TRUE;
     }
     if(IS_MAC_BROADCAST_ADDR(ethernet_hdr->dst_mac.mac)){
@@ -83,5 +109,7 @@ static inline bool_t l2_frame_recv_qualify_on_interface(interface *intf, etherne
     }
     return FALSE;
 }
+
+
 
 #endif

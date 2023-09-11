@@ -1,16 +1,30 @@
 #include "graph.h"
+#include "net.h"
 #include <stdlib.h>
 #include <string.h>
 #include <memory.h>
 #include<assert.h>
 #include <stdio.h>
 
-/*Heuristics, Assign a unique mac address to interface_t*/
-void interface_t_assign_mac_address(interface *interface_t){
 
-    memset(IF_MAC(interface_t), 0, 48);
-    strcpy(IF_MAC(interface_t), interface_t->att_node->node_name);
-    strcat(IF_MAC(interface_t), interface_t->name);
+static unsigned int hash_code(void *ptr, unsigned int size){
+    unsigned int value=0, i =0;
+    char *str = (char*)ptr;
+    while(i < size)
+    {
+        value += *str;
+        value*=97;
+        str++;
+        i++;
+    }
+    return value;
+}
+
+/*Heuristics, Assign a unique mac address to interface_t*/
+void interface_assign_mac_address(interface *interface_t){
+    unsigned int hash_code_val = hash_code(interface_t, sizeof(interface_t));
+    memset(IF_MAC(interface_t), 0, sizeof(IF_MAC(interface_t)));
+    memcpy(IF_MAC(interface_t), (char *)&hash_code_val, sizeof(unsigned int));
 }
 
 bool_t node_set_device_type(node_t *node, unsigned int F){
@@ -71,7 +85,7 @@ void dump_intf_props(interface *interface_t){
     else{
         printf("\t IP Addr = %s/%u", "Nil", 0);
     }
-    printf("\t MAC : %u:\n",IF_MAC(interface_t));
+    printf("\t MAC : %s:\n",IF_MAC(interface_t));
 }
 
 void dump_nw_graph(graph *graph_t){
@@ -142,8 +156,16 @@ char *pcktShiftRight(char *pckt,unsigned int pcktSize,int bufferSize){
 }
 
 interface *getSubnetInterface(node_t *node, char *ip_addr){
+    char ip[16];
+    char *ipIntf=NULL;
+    char intfIp[16];
+    memset(ip,0,16);
+    memset(intfIp,0,16);
     for(int i=0;i<MAX_INTF_PER_NODE;i++){
-        if(!strcmp(node->intf[i]->intf_nw_props.ip_add.ip_addr,ip_addr)) return node->intf[i];
+        ipIntf=node->intf[i]->intf_nw_props.ip_add.ip_addr;
+        apply_mask(ip_addr,node->intf[i]->intf_nw_props.mask,ip);
+        apply_mask(ipIntf,node->intf[i]->intf_nw_props.mask,intfIp);
+        if(!strcmp(ip,intfIp)) return node->intf[i];
     }
     return NULL;
 }

@@ -48,7 +48,7 @@ void addNextNode(glthread_t *curr_glthread,glthread_t *new_glthread);
 void createLink(node_t *node1,node_t *node2,char *from_name,char *to_name,unsigned int cost);
 
 static inline node_t *getNbrNode(interface *interface_t){
-    interface * intf=(&(interface_t->link->intf1)==interface_t?&(interface_t->link->intf1):&(interface_t->link->intf2));
+    interface * intf=(&(interface_t->link->intf1)==interface_t?&(interface_t->link->intf2):&(interface_t->link->intf1));
     return intf->att_node;
 }
 
@@ -65,22 +65,29 @@ static inline int nodeIntfAvail(node_t *node){
 static inline interface *getIntfByName(node_t *node, char *if_name){
     int i=0;
     for(;i<MAX_INTF_PER_NODE;i++){
+        if(!node->intf[i]) return NULL;
         if(!strcmp(node->intf[i]->name,if_name)) return node->intf[i];
     }
     return NULL;
 }
 
-static inline node_t *getNodeByName(graph *topo, char *node_name){
-    node_t* node;
-    glthread_t *thread=&topo->node_list;
-    while(thread!=NULL){
-        node=graph_glue_to_node(thread);
-        if(!strcmp(node->node_name,node_name)) return node;
-        thread=thread->right;
+static inline node_t *getNodeByName(graph *topo, const char *node_name){
+    if (topo == NULL || node_name == NULL) {
+        return NULL;
     }
-    return NULL;
-}
 
+    node_t *node=NULL;
+    glthread_t *curr=NULL;
+
+    ITERATE_GLTHREAD_BEGIN(&topo->node_list, curr){
+
+        node = graph_glue_to_node(curr);
+        if(strncmp(node->node_name, node_name, strlen(node_name)) == 0)
+            return node;
+    } ITERATE_GLTHREAD_END(&topo->node_list, curr);
+    return NULL;
+
+}
 void dumpGraph(graph *graph_t);
 
 void dumpNode(node_t *node);

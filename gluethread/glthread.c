@@ -8,7 +8,10 @@ void initGlthread(glthread_t *glthread){
 }
 
 void glthreadAddNext(glthread_t *curr_glthread, glthread_t *new_glthread){
-    if(!curr_glthread) 
+    if (!curr_glthread || !new_glthread) {
+        // Handle the case where either current or new glthread is null.
+        return;
+    } 
     if(!curr_glthread->right){
         curr_glthread->right = new_glthread;
         new_glthread->left = curr_glthread;

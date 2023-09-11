@@ -16,9 +16,14 @@ typedef enum{
 
 #define IS_MAC_BROADCAST_ADDR(mac) (strcmp((mac),"255.255.255.255.255.255")==0)
 
+int getMaskValue(char mask);
+
 void apply_mask(char *prefix, char mask, char *str_prefix);
 
 void layer2_fill_with_broadcast_mac(char *mac_array);
 
+void get_abcd_macFormat(long long  int x,char *ip);
+
+void get_abcd_ipFormat(unsigned int x,char *ip);
 
 #endif /* __UTILS__ */

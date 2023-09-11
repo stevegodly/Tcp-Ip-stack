@@ -8,13 +8,13 @@ extern graph *topo;
 
 typedef struct arp_table_ arp_table_t;
 
-
+extern void dumpArpTable(arp_table_t * arpTable);
 
 static int nodeHandler(param_t *param,ser_buff_t *buff,op_mode enableOrDisable){
     char *node_name=NULL;   
     char *ip=NULL;
-    int CMDCODE =EXTRACT_CMD_CODE(buff);
     tlv_struct_t *tlv = NULL;
+
     TLV_LOOP_BEGIN(buff, tlv){ 
         if(strncmp(tlv->leaf_id, "nodeName", strlen("nodeName")) == 0){
             node_name = tlv->value;                                        
@@ -22,9 +22,7 @@ static int nodeHandler(param_t *param,ser_buff_t *buff,op_mode enableOrDisable){
     } TLV_LOOP_END;
     node_t *node = getNodeByName(topo, node_name);
 
-    if(CMDCODE==CMDODE_SHOW_NODE) dumpNode(node); 
-
-    else if(CMDCODE==CMDODE_SHOW_ARP) dumpTable(node->node_nw_prop.arp_table);
+    dumpNode(node);     
     return 0;
 }
 
@@ -34,15 +32,27 @@ static int validateNodeName(char *value){
     return VALIDATION_SUCCESS;
 }
 
+extern void arpSendBroadcast(node_t * node,interface *intf,char *ip);
+
 static int arpHandler(param_t *param,ser_buff_t *buff,op_mode enableOrDisable){
-    char *ip;
+    char *ip, *node_name=NULL;
     tlv_struct_t *tlv = NULL;
+    int CMDCODE =EXTRACT_CMD_CODE(buff);
     TLV_LOOP_BEGIN(buff, tlv){ 
-        if(strncmp(tlv->leaf_id, "ip_address", strlen("ip_address")) == 0){
+        if(strncmp(tlv->leaf_id, "node-name", strlen("node-name")) ==0)
+            node_name = tlv->value;
+        else if(strncmp(tlv->leaf_id, "ip_address", strlen("ip_address")) == 0){
             ip = tlv->value;                                        
         }
+        else if(strncmp(tlv->leaf_id, "nodeName", strlen("nodeName")) == 0) node_name = tlv->value;
     } TLV_LOOP_END;
-    
+
+    if(node_name!=NULL) {
+        node_t *node = getNodeByName(topo, node_name);
+        if(CMDCODE==CMDODE_SHOW_ARP) dumpArpTable(node->node_nw_prop.arp_table);
+
+        else if(CMDCODE==CMDODE_ARP_REQ) arpSendBroadcast(node,NULL,ip);
+    }
 }
 
 static int show_nw_topology_handler(param_t *param,ser_buff_t *buff,op_mode enableOrDisable){
@@ -83,9 +93,9 @@ void nw_init_cli(){
             set_param_cmd_code(&node_name,CMDODE_SHOW_NODE);
             {
                 static param_t arp;
-                init_param(&arp,CMD,"Arp",nodeHandler,0,INVALID,0,"ARP:HELP");
+                init_param(&arp,CMD,"Arp",arpHandler,0,INVALID,0,"ARP:HELP");
                 libcli_register_param(&node_name,&arp);
-                set_param_cmd_code(&node_name,CMDODE_SHOW_ARP);
+                set_param_cmd_code(&arp,CMDODE_SHOW_ARP);
             }
         } 
 
@@ -95,16 +105,21 @@ void nw_init_cli(){
         init_param(&node,CMD,"Node",0,0,INVALID,0,"NODE:HELP");
         libcli_register_param(run,&node);
         {
-            static param_t resolve_arp;
-            init_param(&resolve_arp,CMD,"resolve-arp",0,0,INVALID,0,"ARP:HELP");
-            libcli_register_param(&node,&resolve_arp);
+            static param_t node_name;
+            init_param(&node_name, LEAF, 0, 0, validateNodeName, STRING, "node-name", "Node Name");
+            libcli_register_param(&node, &node_name);
             {
-                static param_t ip;
-                init_param(&ip,LEAF,0, arpHandler,0, STRING,"ip_address", "Help : Node name");
-                 libcli_register_param(&resolve_arp,&ip);
-            }
+                static param_t resolve_arp;
+                init_param(&resolve_arp,CMD,"resolve-arp",0,0,INVALID,0,"ARP:HELP");
+                libcli_register_param(&node_name,&resolve_arp);
+                {
+                    static param_t ip;
+                    init_param(&ip,LEAF,0, arpHandler,0, IPV4,"ip_address", "Help : Node name");
+                    libcli_register_param(&resolve_arp,&ip);
+                    set_param_cmd_code(&ip,CMDODE_ARP_REQ);
+                }
+            }    
         }
-        
     }
     support_cmd_negation(config);
 }
